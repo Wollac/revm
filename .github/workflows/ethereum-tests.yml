@@ -33,8 +33,9 @@ jobs:
 
       - name: Install toolchain
         uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.target }}
+        
+      - name: Install cross
+        run: cargo install cross
 
       - uses: Swatinem/rust-cache@v2
         with:
@@ -42,7 +43,7 @@ jobs:
 
       - name: Run Ethereum tests
         run: |
-          cargo run --target ${{ matrix.target }} --profile ${{ matrix.profile }} -p revme -- statetest \
+          cross run --target ${{ matrix.target }} --profile ${{ matrix.profile }} -p revme -- statetest \
             ethtests/GeneralStateTests/ \
             ethtests/LegacyTests/Constantinople/GeneralStateTests/ \
             ethtests/EIPTests/StateTests/stEIP1153-transientStorage/ \
