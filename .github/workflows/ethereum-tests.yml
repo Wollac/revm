@@ -42,7 +42,7 @@ jobs:
 
       - name: Run Ethereum tests
         run: |
-          cargo run --target ${{ matrix.platform.target }} --profile ${{ matrix.profile }} -p revme -- statetest \
+          cargo run --target ${{ matrix.target }} --profile ${{ matrix.profile }} -p revme -- statetest \
             ethtests/GeneralStateTests/ \
             ethtests/LegacyTests/Constantinople/GeneralStateTests/ \
             ethtests/EIPTests/StateTests/stEIP1153-transientStorage/ \
