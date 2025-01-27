@@ -1,59 +1,52 @@
 //! # revm-precompile
 //!
 //! Implementations of EVM precompiled contracts.
-#![warn(rustdoc::all)]
-#![warn(unused_crate_dependencies)]
-#![deny(unused_must_use, rust_2018_idioms)]
+#![cfg_attr(not(test), warn(unused_crate_dependencies))]
 #![cfg_attr(not(feature = "std"), no_std)]
-#![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
 #[macro_use]
-extern crate alloc;
+#[cfg(not(feature = "std"))]
+extern crate alloc as std;
 
-mod blake2;
-mod bn128;
-mod hash;
-mod identity;
-#[cfg(feature = "c-kzg")]
+pub mod blake2;
+#[cfg(feature = "blst")]
+pub mod bls12_381;
+pub mod bn128;
+pub mod hash;
+pub mod identity;
+pub mod interface;
+#[cfg(any(feature = "c-kzg", feature = "kzg-rs"))]
 pub mod kzg_point_evaluation;
-mod modexp;
-mod secp256k1;
+pub mod modexp;
+pub mod secp256k1;
+#[cfg(feature = "secp256r1")]
+pub mod secp256r1;
 pub mod utilities;
 
-use alloc::{boxed::Box, vec::Vec};
-use core::{fmt, hash::Hash};
+pub use interface::*;
+#[cfg(all(feature = "c-kzg", feature = "kzg-rs"))]
+// silence kzg-rs lint as c-kzg will be used as default if both are enabled.
+use kzg_rs as _;
+pub use primitives::{Address, Bytes, HashMap, HashSet, Log, B256};
+
+pub use primitives;
+
+use cfg_if::cfg_if;
+use core::hash::Hash;
 use once_cell::race::OnceBox;
-#[doc(hidden)]
-pub use revm_primitives as primitives;
-pub use revm_primitives::{
-    precompile::{PrecompileError as Error, *},
-    Address, Bytes, HashMap, Log, B256,
-};
+use specification::hardfork::SpecId;
+use std::{boxed::Box, vec::Vec};
 
 pub fn calc_linear_cost_u32(len: usize, base: u64, word: u64) -> u64 {
-    (len as u64 + 32 - 1) / 32 * word + base
+    (len as u64).div_ceil(32) * word + base
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
-pub struct PrecompileOutput {
-    pub cost: u64,
-    pub output: Vec<u8>,
-    pub logs: Vec<Log>,
-}
-
-impl PrecompileOutput {
-    pub fn without_logs(cost: u64, output: Vec<u8>) -> Self {
-        Self {
-            cost,
-            output,
-            logs: Vec::new(),
-        }
-    }
-}
 #[derive(Clone, Default, Debug)]
 pub struct Precompiles {
-    /// Precompiles.
-    pub inner: HashMap<Address, Precompile>,
+    /// Precompiles
+    inner: HashMap<Address, PrecompileFn>,
+    /// Addresses of precompile
+    addresses: HashSet<Address>,
 }
 
 impl Precompiles {
@@ -65,6 +58,7 @@ impl Precompiles {
             PrecompileSpecId::ISTANBUL => Self::istanbul(),
             PrecompileSpecId::BERLIN => Self::berlin(),
             PrecompileSpecId::CANCUN => Self::cancun(),
+            PrecompileSpecId::PRAGUE => Self::prague(),
             PrecompileSpecId::LATEST => Self::latest(),
         }
     }
@@ -82,6 +76,11 @@ impl Precompiles {
             ]);
             Box::new(precompiles)
         })
+    }
+
+    /// Returns inner HashMap of precompiles.
+    pub fn inner(&self) -> &HashMap<Address, PrecompileFn> {
+        &self.inner
     }
 
     /// Returns precompiles for Byzantium spec.
@@ -108,12 +107,12 @@ impl Precompiles {
         INSTANCE.get_or_init(|| {
             let mut precompiles = Self::byzantium().clone();
             precompiles.extend([
-                // EIP-152: Add BLAKE2 compression function `F` precompile.
-                blake2::FUN,
                 // EIP-1108: Reduce alt_bn128 precompile gas costs.
                 bn128::add::ISTANBUL,
                 bn128::mul::ISTANBUL,
                 bn128::pair::ISTANBUL,
+                // EIP-152: Add BLAKE2 compression function `F` precompile.
+                blake2::FUN,
             ]);
             Box::new(precompiles)
         })
@@ -134,20 +133,42 @@ impl Precompiles {
 
     /// Returns precompiles for Cancun spec.
     ///
-    /// If `std` feature is not enabled KZG Point Evaluation precompile will not be included.
+    /// If the `c-kzg` feature is not enabled KZG Point Evaluation precompile will not be included,
+    /// effectively making this the same as Berlin.
     pub fn cancun() -> &'static Self {
         static INSTANCE: OnceBox<Precompiles> = OnceBox::new();
         INSTANCE.get_or_init(|| {
-            let precompiles = Self::berlin().clone();
+            let mut precompiles = Self::berlin().clone();
 
-            // Don't include KZG point evaluation precompile in no_std builds.
-            #[cfg(feature = "c-kzg")]
+            // EIP-4844: Shard Blob Transactions
+            cfg_if! {
+                if #[cfg(any(feature = "c-kzg", feature = "kzg-rs"))] {
+                    let precompile = kzg_point_evaluation::POINT_EVALUATION.clone();
+                } else {
+                    let precompile = PrecompileWithAddress(u64_to_address(0x0A), |_,_| Err(PrecompileErrors::Fatal { msg: "c-kzg feature is not enabled".into()}));
+                }
+            }
+
+
+            precompiles.extend([
+                precompile,
+            ]);
+
+            Box::new(precompiles)
+        })
+    }
+
+    /// Returns precompiles for Prague spec.
+    pub fn prague() -> &'static Self {
+        static INSTANCE: OnceBox<Precompiles> = OnceBox::new();
+        INSTANCE.get_or_init(|| {
+            let precompiles = Self::cancun().clone();
+
+            // Don't include BLS12-381 precompiles in no_std builds.
+            #[cfg(feature = "blst")]
             let precompiles = {
                 let mut precompiles = precompiles;
-                precompiles.extend([
-                    // EIP-4844: Shard Blob Transactions
-                    kzg_point_evaluation::POINT_EVALUATION,
-                ]);
+                precompiles.extend(bls12_381::precompiles());
                 precompiles
             };
 
@@ -157,32 +178,37 @@ impl Precompiles {
 
     /// Returns the precompiles for the latest spec.
     pub fn latest() -> &'static Self {
-        Self::cancun()
+        Self::prague()
     }
 
     /// Returns an iterator over the precompiles addresses.
     #[inline]
-    pub fn addresses(&self) -> impl Iterator<Item = &Address> + '_ {
+    pub fn addresses(&self) -> impl ExactSizeIterator<Item = &Address> {
         self.inner.keys()
     }
 
     /// Consumes the type and returns all precompile addresses.
     #[inline]
-    pub fn into_addresses(self) -> impl Iterator<Item = Address> {
+    pub fn into_addresses(self) -> impl ExactSizeIterator<Item = Address> {
         self.inner.into_keys()
     }
 
     /// Is the given address a precompile.
     #[inline]
     pub fn contains(&self, address: &Address) -> bool {
-        self.get(address).is_some()
+        self.inner.contains_key(address)
     }
 
     /// Returns the precompile for the given address.
     #[inline]
-    pub fn get(&self, address: &Address) -> Option<Precompile> {
-        //return None;
-        self.inner.get(address).cloned()
+    pub fn get(&self, address: &Address) -> Option<&PrecompileFn> {
+        self.inner.get(address)
+    }
+
+    /// Returns the precompile for the given address.
+    #[inline]
+    pub fn get_mut(&mut self, address: &Address) -> Option<&mut PrecompileFn> {
+        self.inner.get_mut(address)
     }
 
     /// Is the precompiles list empty.
@@ -195,41 +221,48 @@ impl Precompiles {
         self.inner.len()
     }
 
+    /// Returns the precompiles addresses as a set.
+    pub fn addresses_set(&self) -> &HashSet<Address> {
+        &self.addresses
+    }
+
     /// Extends the precompiles with the given precompiles.
     ///
     /// Other precompiles with overwrite existing precompiles.
+    #[inline]
     pub fn extend(&mut self, other: impl IntoIterator<Item = PrecompileWithAddress>) {
-        self.inner.extend(other.into_iter().map(Into::into));
-    }
-}
-
-#[derive(Clone)]
-pub enum Precompile {
-    Standard(StandardPrecompileFn),
-    Env(EnvPrecompileFn),
-}
-
-impl fmt::Debug for Precompile {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Precompile::Standard(_) => f.write_str("Standard"),
-            Precompile::Env(_) => f.write_str("Env"),
-        }
+        let items: Vec<PrecompileWithAddress> = other.into_iter().collect::<Vec<_>>();
+        self.addresses.extend(items.iter().map(|p| *p.address()));
+        self.inner.extend(items.into_iter().map(|p| (p.0, p.1)));
     }
 }
 
 #[derive(Clone, Debug)]
-pub struct PrecompileWithAddress(pub Address, pub Precompile);
+pub struct PrecompileWithAddress(pub Address, pub PrecompileFn);
 
-impl From<(Address, Precompile)> for PrecompileWithAddress {
-    fn from(value: (Address, Precompile)) -> Self {
+impl From<(Address, PrecompileFn)> for PrecompileWithAddress {
+    fn from(value: (Address, PrecompileFn)) -> Self {
         PrecompileWithAddress(value.0, value.1)
     }
 }
 
-impl From<PrecompileWithAddress> for (Address, Precompile) {
+impl From<PrecompileWithAddress> for (Address, PrecompileFn) {
     fn from(value: PrecompileWithAddress) -> Self {
         (value.0, value.1)
+    }
+}
+
+impl PrecompileWithAddress {
+    /// Returns reference of address.
+    #[inline]
+    pub fn address(&self) -> &Address {
+        &self.0
+    }
+
+    /// Returns reference of precompile.
+    #[inline]
+    pub fn precompile(&self) -> &PrecompileFn {
+        &self.1
     }
 }
 
@@ -240,13 +273,20 @@ pub enum PrecompileSpecId {
     ISTANBUL,
     BERLIN,
     CANCUN,
+    PRAGUE,
     LATEST,
 }
 
+impl From<SpecId> for PrecompileSpecId {
+    fn from(spec_id: SpecId) -> Self {
+        Self::from_spec_id(spec_id)
+    }
+}
+
 impl PrecompileSpecId {
-    /// Returns the appropriate precompile Spec for the primitive [SpecId](revm_primitives::SpecId)
-    pub const fn from_spec_id(spec_id: revm_primitives::SpecId) -> Self {
-        use revm_primitives::SpecId::*;
+    /// Returns the appropriate precompile Spec for the primitive [SpecId].
+    pub const fn from_spec_id(spec_id: specification::hardfork::SpecId) -> Self {
+        use specification::hardfork::SpecId::*;
         match spec_id {
             FRONTIER | FRONTIER_THAWING | HOMESTEAD | DAO_FORK | TANGERINE | SPURIOUS_DRAGON => {
                 Self::HOMESTEAD
@@ -255,19 +295,19 @@ impl PrecompileSpecId {
             ISTANBUL | MUIR_GLACIER => Self::ISTANBUL,
             BERLIN | LONDON | ARROW_GLACIER | GRAY_GLACIER | MERGE | SHANGHAI => Self::BERLIN,
             CANCUN => Self::CANCUN,
+            PRAGUE | OSAKA => Self::PRAGUE,
             LATEST => Self::LATEST,
-            #[cfg(feature = "optimism")]
-            BEDROCK | REGOLITH | CANYON => Self::BERLIN,
         }
     }
 }
 
 /// Const function for making an address by concatenating the bytes from two given numbers.
 ///
-/// Note that 32 + 128 = 160 = 20 bytes (the length of an address). This function is used
-/// as a convenience for specifying the addresses of the various precompiles.
+/// Note that 32 + 128 = 160 = 20 bytes (the length of an address).
+///
+/// This function is used as a convenience for specifying the addresses of the various precompiles.
 #[inline]
-const fn u64_to_address(x: u64) -> Address {
+pub const fn u64_to_address(x: u64) -> Address {
     let x = x.to_be_bytes();
     Address::new([
         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, x[0], x[1], x[2], x[3], x[4], x[5], x[6], x[7],

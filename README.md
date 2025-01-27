@@ -11,7 +11,7 @@
 
 **Rust Ethereum Virtual Machine**
 
-![](./assets/revm-banner.png)
+![](./assets/logo/revm-banner.png)
 
 Revm is an EVM written in Rust that is focused on **speed** and **simplicity**.
 It has a fast and flexible implementation with a simple interface and embedded Host.
@@ -92,18 +92,34 @@ Flamegraph also requires sudo mode to run (hence the `--root` cli arg) and will 
 
 [flamegraph]: https://docs.rs/crate/flamegraph/0.1.6
 
-## Running examples
+## Running Examples
 
 ```shell
-cargo run -p revm --features ethersdb --example fork_ref_transact
+# Run database reference example
+cargo run -p example-database-ref
+
+# Run contract deployment example
+cargo run -p example-contract-deployment
+
+# Query Uniswap V2 pool reserves
+cargo run -p example-uniswap-get-reserves
+
+# Execute USDC swap on Uniswap V2
+cargo run -p example-uniswap-v2-usdc-swap
+
+# Generate block traces 
+cargo run -p example-block-traces
+
+# Run database reference example
+cargo run -p example-database-ref
 ```
 
-Generate block traces and write them to json files in a new `traces/` directory.
-Each file corresponds to a transaction in the block and is named as such: `<tx index>.json`.
-
-```shell
-cargo run -p revm --features std,serde,ethersdb --example generate_block_traces
-```
+All examples can be found in the `examples/` directory. Each example demonstrates different aspects of revm:
+- `block_traces`: Generating execution traces for entire blocks
+- `contract_deployment`: Deploying and interacting with smart contracts
+- `database_ref`: Using database references for state access
+- `uniswap_get_reserves`: Reading state from Uniswap contracts
+- `uniswap_v2_usdc_swap`: Executing swaps on Uniswap V2
 
 # Used by:
 
@@ -112,6 +128,12 @@ cargo run -p revm --features std,serde,ethersdb --example generate_block_traces
 * [Reth](https://github.com/paradigmxyz/reth) Modular, contributor-friendly and blazing-fast implementation of the Ethereum protocol
 * [Arbiter](https://github.com/primitivefinance/arbiter) is a framework for stateful Ethereum smart-contract simulation
 * [Zeth](https://github.com/risc0/zeth) is an open-source ZK block prover for Ethereum built on the RISC Zero zkVM.
+* [VERBS](https://github.com/simtopia/verbs) an open-source Ethereum agent-based modelling and simulation library with a Python API.
+* [Hardhat](https://github.com/NomicFoundation/hardhat) is a development environment to compile, deploy, test, and debug your Ethereum software.
+* [Trin](https://github.com/ethereum/trin) is Portal Network client. An execution and consensus layer Ethereum light client written in Rust. Portal Network client's provide complete, provable, and distributed execution archival access.
+* [Simular](https://github.com/simular-fi/simular/) is a Python smart-contract API with a fast, embedded, Ethereum Virtual Machine.
+* [rbuilder](https://github.com/flashbots/rbuilder) is a state of the art Ethereum MEV-Boost block builder written in Rust and designed to work with Reth.
+* [Tycho-simulation](https://github.com/propeller-heads/tycho-simulation) is a local simulation toolkit that lets you simulate any DEX pool in a revm environment without worrying about protocol internals.
 * ...
 
 (If you want to add project to the list, ping me or open the PR)
@@ -132,4 +154,4 @@ mdbook serve documentation
 
 There is public telegram group: https://t.me/+Ig4WDWOzikA3MzA0
 
-Or if you want to hire me or contact me directly, here is my email: dragan0rakita@gmail.com and telegram: https://t.me/draganrakita
+Or if you want to contact me directly, here is my email: dragan0rakita@gmail.com and telegram: https://t.me/draganrakita
