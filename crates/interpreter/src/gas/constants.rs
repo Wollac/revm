@@ -1,6 +1,13 @@
 pub const ZERO: u64 = 0;
 pub const BASE: u64 = 2;
+
 pub const VERYLOW: u64 = 3;
+pub const DATA_LOADN_GAS: u64 = 3;
+
+pub const CONDITION_JUMP_GAS: u64 = 4;
+pub const RETF_GAS: u64 = 3;
+pub const DATA_LOAD_GAS: u64 = 4;
+
 pub const LOW: u64 = 5;
 pub const MID: u64 = 8;
 pub const HIGH: u64 = 10;
@@ -21,16 +28,28 @@ pub const BLOCKHASH: u64 = 20;
 pub const CODEDEPOSIT: u64 = 200;
 
 /// EIP-1884: Repricing for trie-size-dependent opcodes
-pub const INSTANBUL_SLOAD_GAS: u64 = 800;
+pub const ISTANBUL_SLOAD_GAS: u64 = 800;
 pub const SSTORE_SET: u64 = 20000;
 pub const SSTORE_RESET: u64 = 5000;
 pub const REFUND_SSTORE_CLEARS: i64 = 15000;
 
-pub const TRANSACTION_ZERO_DATA: u64 = 4;
-pub const TRANSACTION_NON_ZERO_DATA_INIT: u64 = 16;
-pub const TRANSACTION_NON_ZERO_DATA_FRONTIER: u64 = 68;
+/// The standard cost of calldata token.
+pub const STANDARD_TOKEN_COST: u64 = 4;
+/// The cost of a non-zero byte in calldata.
+pub const NON_ZERO_BYTE_DATA_COST: u64 = 68;
+/// The multiplier for a non zero byte in calldata.
+pub const NON_ZERO_BYTE_MULTIPLIER: u64 = NON_ZERO_BYTE_DATA_COST / STANDARD_TOKEN_COST;
+/// The cost of a non-zero byte in calldata adjusted by [EIP-2028](https://eips.ethereum.org/EIPS/eip-2028).
+pub const NON_ZERO_BYTE_DATA_COST_ISTANBUL: u64 = 16;
+/// The multiplier for a non zero byte in calldata adjusted by [EIP-2028](https://eips.ethereum.org/EIPS/eip-2028).
+pub const NON_ZERO_BYTE_MULTIPLIER_ISTANBUL: u64 =
+    NON_ZERO_BYTE_DATA_COST_ISTANBUL / STANDARD_TOKEN_COST;
+// The cost floor per token as defined by [EIP-2028](https://eips.ethereum.org/EIPS/eip-2028).
+pub const TOTAL_COST_FLOOR_PER_TOKEN: u64 = 10;
 
-// berlin eip2929 constants
+pub const EOF_CREATE_GAS: u64 = 32000;
+
+// Berlin eip2929 constants
 pub const ACCESS_LIST_ADDRESS: u64 = 2400;
 pub const ACCESS_LIST_STORAGE_KEY: u64 = 1900;
 pub const COLD_SLOAD_COST: u64 = 2100;
@@ -42,3 +61,4 @@ pub const WARM_SSTORE_RESET: u64 = SSTORE_RESET - COLD_SLOAD_COST;
 pub const INITCODE_WORD_COST: u64 = 2;
 
 pub const CALL_STIPEND: u64 = 2300;
+pub const MIN_CALLEE_GAS: u64 = CALL_STIPEND;

@@ -1,254 +1,268 @@
-pub mod analysis;
-mod contract;
+pub mod ext_bytecode;
+mod input;
+mod loop_control;
+mod return_data;
+mod runtime_flags;
+#[cfg(feature = "serde")]
+pub mod serde;
 mod shared_memory;
 mod stack;
-
-pub use analysis::BytecodeLocked;
-pub use contract::Contract;
-pub use shared_memory::{next_multiple_of_32, SharedMemory};
-pub use stack::{Stack, STACK_LIMIT};
+mod subroutine_stack;
 
 use crate::{
-    primitives::Bytes, push, push_b256, return_ok, return_revert, CallInputs, CreateInputs, Gas,
-    Host, InstructionResult,
+    interpreter_types::*,
+    table::{CustomInstruction, InstructionTable},
+    Gas, Host, Instruction, InstructionResult, InterpreterAction,
 };
-use alloc::boxed::Box;
-use core::cmp::min;
-use core::ops::Range;
-use revm_primitives::{Address, U256};
-
-pub use self::shared_memory::EMPTY_SHARED_MEMORY;
-
-#[derive(Debug)]
-pub struct Interpreter {
-    /// Contract information and invoking data
-    pub contract: Box<Contract>,
-    /// The current instruction pointer.
-    pub instruction_pointer: *const u8,
-    /// The execution control flag. If this is not set to `Continue`, the interpreter will stop
-    /// execution.
-    pub instruction_result: InstructionResult,
-    /// The gas state.
-    pub gas: Gas,
-    /// Shared memory.
-    ///
-    /// Note: This field is only set while running the interpreter loop.
-    /// Otherwise it is taken and replaced with empty shared memory.
-    pub shared_memory: SharedMemory,
-    /// Stack.
-    pub stack: Stack,
-    /// The return data buffer for internal calls.
-    /// It has multi usage:
-    ///
-    /// * It contains the output bytes of call sub call.
-    /// * When this interpreter finishes execution it contains the output bytes of this contract.
-    pub return_data_buffer: Bytes,
-    /// Whether the interpreter is in "staticcall" mode, meaning no state changes can happen.
-    pub is_static: bool,
-    /// Actions that the EVM should do.
-    ///
-    /// Set inside CALL or CREATE instructions and RETURN or REVERT instructions. Additionally those instructions will set
-    /// InstructionResult to CallOrCreate/Return/Revert so we know the reason.
-    pub next_action: Option<InterpreterAction>,
-}
+use core::cell::RefCell;
+pub use ext_bytecode::ExtBytecode;
+pub use input::InputsImpl;
+use loop_control::LoopControl as LoopControlImpl;
+use primitives::Bytes;
+use return_data::ReturnDataImpl;
+pub use runtime_flags::RuntimeFlags;
+pub use shared_memory::{num_words, MemoryGetter, SharedMemory, EMPTY_SHARED_MEMORY};
+use specification::hardfork::SpecId;
+pub use stack::{Stack, STACK_LIMIT};
+use std::rc::Rc;
+use subroutine_stack::SubRoutineImpl;
 
 #[derive(Debug, Clone)]
-pub struct InterpreterResult {
-    pub result: InstructionResult,
-    pub output: Bytes,
-    pub gas: Gas,
+#[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
+pub struct Interpreter<WIRE: InterpreterTypes> {
+    pub bytecode: WIRE::Bytecode,
+    pub stack: WIRE::Stack,
+    pub return_data: WIRE::ReturnData,
+    pub memory: WIRE::Memory,
+    pub input: WIRE::Input,
+    pub sub_routine: WIRE::SubRoutineStack,
+    pub control: WIRE::Control,
+    pub runtime_flag: WIRE::RuntimeFlag,
+    pub extend: WIRE::Extend,
 }
 
-#[derive(Debug, Clone)]
-pub enum InterpreterAction {
-    SubCall {
-        /// Call inputs
-        inputs: Box<CallInputs>,
-        /// The offset into `self.memory` of the return data.
-        ///
-        /// This value must be ignored if `self.return_len` is 0.
-        return_memory_offset: Range<usize>,
-    },
-    Create {
-        inputs: Box<CreateInputs>,
-    },
-    Return {
-        result: InterpreterResult,
-    },
-}
-
-impl Interpreter {
+impl<EXT: Default, MG: MemoryGetter> Interpreter<EthInterpreter<EXT, MG>> {
     /// Create new interpreter
-    pub fn new(contract: Box<Contract>, gas_limit: u64, is_static: bool) -> Self {
-        Self {
-            instruction_pointer: contract.bytecode.as_ptr(),
-            contract,
-            gas: Gas::new(gas_limit),
-            instruction_result: InstructionResult::Continue,
+    pub fn new(
+        memory: Rc<RefCell<MG>>,
+        bytecode: ExtBytecode,
+        inputs: InputsImpl,
+        is_static: bool,
+        is_eof_init: bool,
+        spec_id: SpecId,
+        gas_limit: u64,
+    ) -> Self {
+        let runtime_flag = RuntimeFlags {
+            spec_id,
             is_static,
-            return_data_buffer: Bytes::new(),
-            shared_memory: EMPTY_SHARED_MEMORY,
-            stack: Stack::new(),
-            next_action: None,
-        }
-    }
-
-    /// When sub create call returns we can insert output of that call into this interpreter.
-    pub fn insert_create_output(&mut self, result: InterpreterResult, address: Option<Address>) {
-        self.return_data_buffer = match result.result {
-            // Save data to return data buffer if the create reverted
-            return_revert!() => result.output,
-            // Otherwise clear it
-            _ => Bytes::new(),
+            is_eof: bytecode.is_eof(),
+            is_eof_init,
         };
 
-        match result.result {
-            return_ok!() => {
-                push_b256!(self, address.unwrap_or_default().into_word());
-                self.gas.erase_cost(result.gas.remaining());
-                self.gas.record_refund(result.gas.refunded());
-            }
-            return_revert!() => {
-                push!(self, U256::ZERO);
-                self.gas.erase_cost(result.gas.remaining());
-            }
-            InstructionResult::FatalExternalError => {
-                self.instruction_result = InstructionResult::FatalExternalError;
-            }
-            _ => {
-                push!(self, U256::ZERO);
-            }
+        Self {
+            bytecode,
+            stack: Stack::new(),
+            return_data: ReturnDataImpl::default(),
+            memory,
+            input: inputs,
+            sub_routine: SubRoutineImpl::default(),
+            control: LoopControlImpl::new(gas_limit),
+            runtime_flag,
+            extend: EXT::default(),
         }
     }
+}
 
-    /// When sub call returns we can insert output of that call into this interpreter.
-    ///
-    /// Note that shared memory is required as a input field.
-    /// As SharedMemory inside Interpreter is taken and replaced with empty (not valid) memory.
-    pub fn insert_call_output(
-        &mut self,
-        shared_memory: &mut SharedMemory,
-        result: InterpreterResult,
-        memory_return_offset: Range<usize>,
-    ) {
-        let out_offset = memory_return_offset.start;
-        let out_len = memory_return_offset.len();
+pub struct EthInterpreter<EXT = (), MG = SharedMemory> {
+    _phantom: core::marker::PhantomData<fn() -> (EXT, MG)>,
+}
 
-        self.return_data_buffer = result.output;
-        let target_len = min(out_len, self.return_data_buffer.len());
+impl<EXT, MG: MemoryGetter> InterpreterTypes for EthInterpreter<EXT, MG> {
+    type Stack = Stack;
+    type Memory = Rc<RefCell<MG>>;
+    type Bytecode = ExtBytecode;
+    type ReturnData = ReturnDataImpl;
+    type Input = InputsImpl;
+    type SubRoutineStack = SubRoutineImpl;
+    type Control = LoopControlImpl;
+    type RuntimeFlag = RuntimeFlags;
+    type Extend = EXT;
+}
 
-        match result.result {
-            return_ok!() => {
-                // return unspend gas.
-                self.gas.erase_cost(result.gas.remaining());
-                self.gas.record_refund(result.gas.refunded());
-                shared_memory.set(out_offset, &self.return_data_buffer[..target_len]);
-                push!(self, U256::from(1));
-            }
-            return_revert!() => {
-                self.gas.erase_cost(result.gas.remaining());
-                shared_memory.set(out_offset, &self.return_data_buffer[..target_len]);
-                push!(self, U256::ZERO);
-            }
-            InstructionResult::FatalExternalError => {
-                self.instruction_result = InstructionResult::FatalExternalError;
-            }
-            _ => {
-                push!(self, U256::ZERO);
-            }
-        }
-    }
+impl<IW: InterpreterTypes, H: Host> CustomInstruction for Instruction<IW, H> {
+    type Wire = IW;
+    type Host = H;
 
-    /// Returns the opcode at the current instruction pointer.
     #[inline]
-    pub fn current_opcode(&self) -> u8 {
-        unsafe { *self.instruction_pointer }
+    fn exec(&self, interpreter: &mut Interpreter<Self::Wire>, host: &mut Self::Host) {
+        (self)(interpreter, host);
     }
 
-    /// Returns a reference to the contract.
     #[inline]
-    pub fn contract(&self) -> &Contract {
-        &self.contract
+    fn from_base(instruction: Instruction<Self::Wire, Self::Host>) -> Self {
+        instruction
     }
+}
 
-    /// Returns a reference to the interpreter's gas state.
-    #[inline]
-    pub fn gas(&self) -> &Gas {
-        &self.gas
-    }
-
-    /// Returns a reference to the interpreter's stack.
-    #[inline]
-    pub fn stack(&self) -> &Stack {
-        &self.stack
-    }
-
-    /// Returns the current program counter.
-    #[inline]
-    pub fn program_counter(&self) -> usize {
-        // SAFETY: `instruction_pointer` should be at an offset from the start of the bytecode.
-        // In practice this is always true unless a caller modifies the `instruction_pointer` field manually.
-        unsafe {
-            self.instruction_pointer
-                .offset_from(self.contract.bytecode.as_ptr()) as usize
-        }
-    }
-
+impl<IW: InterpreterTypes> Interpreter<IW> {
     /// Executes the instruction at the current instruction pointer.
     ///
     /// Internally it will increment instruction pointer by one.
-    #[inline(always)]
-    fn step<FN, H: Host>(&mut self, instruction_table: &[FN; 256], host: &mut H)
-    where
-        FN: Fn(&mut Interpreter, &mut H),
-    {
+    #[inline]
+    pub(crate) fn step<H: Host>(
+        &mut self,
+        instruction_table: &[Instruction<IW, H>; 256],
+        host: &mut H,
+    ) {
         // Get current opcode.
-        let opcode = unsafe { *self.instruction_pointer };
+        let opcode = self.bytecode.opcode();
 
         // SAFETY: In analysis we are doing padding of bytecode so that we are sure that last
         // byte instruction is STOP so we are safe to just increment program_counter bcs on last instruction
         // it will do noop and just stop execution of this contract
-        self.instruction_pointer = unsafe { self.instruction_pointer.offset(1) };
+        self.bytecode.relative_jump(1);
 
-        // execute instruction.
-        (instruction_table[opcode as usize])(self, host)
+        // Execute instruction.
+        instruction_table[opcode as usize].exec(self, host)
     }
 
-    /// Take memory and replace it with empty memory.
-    pub fn take_memory(&mut self) -> SharedMemory {
-        core::mem::replace(&mut self.shared_memory, EMPTY_SHARED_MEMORY)
+    #[inline]
+    pub fn reset_control(&mut self) {
+        self.control
+            .set_next_action(InterpreterAction::None, InstructionResult::Continue);
+    }
+
+    pub fn take_next_action(&mut self) -> InterpreterAction {
+        // Return next action if it is some.
+        let action = self.control.take_next_action();
+        if action.is_some() {
+            return action;
+        }
+        // If not, return action without output as it is a halt.
+        InterpreterAction::Return {
+            result: InterpreterResult {
+                result: self.control.instruction_result(),
+                // Return empty bytecode
+                output: Bytes::new(),
+                gas: *self.control.gas(),
+            },
+        }
     }
 
     /// Executes the interpreter until it returns or stops.
-    pub fn run<FN, H: Host>(
+    pub fn run_plain<H: Host>(
         &mut self,
-        shared_memory: SharedMemory,
-        instruction_table: &[FN; 256],
+        instruction_table: &InstructionTable<IW, H>,
         host: &mut H,
-    ) -> InterpreterAction
-    where
-        FN: Fn(&mut Interpreter, &mut H),
-    {
-        self.next_action = None;
-        self.instruction_result = InstructionResult::Continue;
-        self.shared_memory = shared_memory;
-        // main loop
-        while self.instruction_result == InstructionResult::Continue {
+    ) -> InterpreterAction {
+        self.reset_control();
+
+        // Main loop
+        while self.control.instruction_result().is_continue() {
             self.step(instruction_table, host);
         }
 
-        // Return next action if it is some.
-        if let Some(action) = self.next_action.take() {
-            return action;
+        self.take_next_action()
+    }
+}
+
+/// The result of an interpreter operation.
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
+pub struct InterpreterResult {
+    /// The result of the instruction execution.
+    pub result: InstructionResult,
+    /// The output of the instruction execution.
+    pub output: Bytes,
+    /// The gas usage information.
+    pub gas: Gas,
+}
+
+impl InterpreterResult {
+    /// Returns a new `InterpreterResult` with the given values.
+    pub fn new(result: InstructionResult, output: Bytes, gas: Gas) -> Self {
+        Self {
+            result,
+            output,
+            gas,
         }
-        // If not, return action without output.
-        InterpreterAction::Return {
-            result: InterpreterResult {
-                result: self.instruction_result,
-                // return empty bytecode
-                output: Bytes::new(),
-                gas: self.gas,
+    }
+
+    /// Returns whether the instruction result is a success.
+    #[inline]
+    pub const fn is_ok(&self) -> bool {
+        self.result.is_ok()
+    }
+
+    /// Returns whether the instruction result is a revert.
+    #[inline]
+    pub const fn is_revert(&self) -> bool {
+        self.result.is_revert()
+    }
+
+    /// Returns whether the instruction result is an error.
+    #[inline]
+    pub const fn is_error(&self) -> bool {
+        self.result.is_error()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    // use super::*;
+    // use crate::{table::InstructionTable, DummyHost};
+
+    // #[test]
+    // fn object_safety() {
+    //     let mut interp = Interpreter::new(Contract::default(), u64::MAX, false);
+    //     interp.spec_id = SpecId::CANCUN;
+    //     let mut host = crate::DummyHost::<DefaultEthereumWiring>::default();
+    //     let table: &InstructionTable<DummyHost<DefaultEthereumWiring>> =
+    //         &crate::table::make_instruction_table::<Interpreter, DummyHost<DefaultEthereumWiring>>(
+    //         );
+    //     let _ = interp.run(EMPTY_SHARED_MEMORY, table, &mut host);
+
+    //     let host: &mut dyn Host<EvmWiringT = DefaultEthereumWiring> =
+    //         &mut host as &mut dyn Host<EvmWiringT = DefaultEthereumWiring>;
+    //     let table: &InstructionTable<dyn Host<EvmWiringT = DefaultEthereumWiring>> =
+    //         &crate::table::make_instruction_table::<
+    //             Interpreter,
+    //             dyn Host<EvmWiringT = DefaultEthereumWiring>,
+    //         >();
+    //     let _ = interp.run(EMPTY_SHARED_MEMORY, table, host);
+    // }
+
+    use super::*;
+    use bytecode::Bytecode;
+    use primitives::{Address, Bytes, U256};
+
+    #[test]
+    #[cfg(feature = "serde")]
+    fn test_interpreter_serde() {
+        let bytecode = Bytecode::new_raw(Bytes::from(&[0x60, 0x00, 0x60, 0x00, 0x01][..]));
+        let interpreter = Interpreter::<EthInterpreter>::new(
+            Rc::new(RefCell::new(SharedMemory::new())),
+            ExtBytecode::new(bytecode),
+            InputsImpl {
+                target_address: Address::ZERO,
+                caller_address: Address::ZERO,
+                input: Bytes::default(),
+                call_value: U256::ZERO,
             },
-        }
+            false,
+            false,
+            SpecId::LATEST,
+            u64::MAX,
+        );
+
+        let serialized = bincode::serialize(&interpreter).unwrap();
+
+        let deserialized: Interpreter<EthInterpreter> = bincode::deserialize(&serialized).unwrap();
+
+        assert_eq!(
+            interpreter.bytecode.pc(),
+            deserialized.bytecode.pc(),
+            "Program counter should be preserved"
+        );
     }
 }

@@ -1,5 +1,216 @@
 Because this is workspace with multi libraries, tags will be simplified, and with this document you can match version of project with git tag.
 
+# v44 tag
+date: 18.09.2024
+
+Small maintenance release.
+Code can be found in release/v44 branch.
+Fixes bug with Inspector selfdestruct not called every time, and enabled PRAGUE_EOF in statetest for PRAGUE tests.
+
+* `revme`: 0.10.1 -> 0.10.2
+* `revm`: 14.0.1 -> 14.0.2
+* `revm-interpreter`: 10.0.1 -> 10.0.2
+* `revm-primitives`: 9.0.1 -> 9.0.2
+* `revm-precompile`: 11.0.1 -> 11.0.2
+* `revm-test`: 0.1.0
+
+# v43 tag
+date: 30.08.2024
+
+Logo change and doc fix.
+
+* `revm`: 14.0.0 -> 14.0.1
+* `revm-interpreter`: 10.0.0 -> 10.0.1
+* `revm-primitives`: 9.0.0 -> 9.0.1
+* `revm-precompile`: 11.0.0 -> 11.0.1
+* `revme`: 0.10.0 -> 0.10.1
+
+# v42 tag
+date: 29.08.2024
+
+new EIP-7702 implemented. Passing all EOF and EIP-7702 tests.
+Preparation for devnet-3.
+
+* `revme`: 0.9.0 -> 0.10.0
+* `revm`: 13.0.0 -> 14.0.0
+* `revm-interpreter`: 9.0.0 -> 10.0.0
+* `revm-primitives`: 8.0.0 -> 9.0.0
+* `revm-precompile`: 10.0.0 -> 11.0.0
+
+# v41 tag
+date: 08.08.2024
+
+EOF fixes and improvements.
+Optimism Granite fork support.
+
+* `revme`: 0.8.0 -> 0.9.0
+* `revm`: 12.1.0 -> 13.0.0
+* `revm-interpreter`: 8.1.0 -> 9.0.0
+* `revm-primitives`: 7.1.0 -> 8.0.0
+* `revm-precompile`: 9.2.0 -> 10.0.0
+* `revm-test`: 0.1.0
+
+# v40 tag
+date 17.07.2024
+
+EOF bugfix.
+
+* revm: 12.0.0 -> 12.1.0
+* revm-interpreter: 8.0.0 -> 8.1.0
+* revm-primitives: 7.0.0 -> 7.1.0
+* revm-precompile: 9.1.0 -> 8.2.0
+
+# v39 tag
+date: 16.07.2024
+
+Fixes for eip7702 and EOF. Kzg precompile alternative kzg-rs added. 
+
+* revme: 0.7.0 -> 0.8.0
+* revm: 11.0.0 -> 12.0.0
+* revm-interpreter: 7.0.0 -> 8.0.0
+* revm-primitives: 6.0.0 -> 7.0.0
+* revm-precompile: 9.0.0 -> 9.1.0
+
+# v38 tag
+date: 08.07.2024
+
+* Add EIP-7702 for Prague.
+* Import AccessList from alloy-eips repo.
+* EOF fixes
+* Utility changes.
+
+Versions
+* revme: 0.6.0 -> 0.7.0
+* revm: 10.0.0 -> 11.0.0
+* revm-interpreter: 6.0.0 -> 7.0.0
+* revm-primitives: 5.0.0 -> 6.0.0
+* revm-precompile: 8.0.0 -> 9.0.0
+
+# v37 tag
+date: 20.06.2024
+
+Audit of the codebase announced: https://hackmd.io/G7zazTX4TtekCnj6xlgctQ
+secp256r1 precompile added.
+
+Prague changes:
+* EOF bugs squashed.
+* Introducing PragueEOF hardfork.
+* EIP-2935 (blockhashes) modified for devnet-1.
+* Fixed for BLS12-381 curve.
+
+Versions:
+* revme: 0.5.0 -> 0.6.0
+* revm: 9.0.0 -> 10.0.0
+* revm-interpreter: 5.0.0 -> 6.0.0
+* revm-primitives: 4.0.0 -> 5.0.0
+* revm-precompile: 7.0.0 -> 8.0.0
+
+# v36 tag
+date: 12.05.2024
+
+Support for prague EIPs.
+* EOF not fully tested but most of implementation is there.
+* EIP-2537: BLS12-381 curve operations
+* EIP-2935: Serve historical block hashes from state
+
+EOF removed BytecodeLocked, OpCode table got changed, and CallInputs got refactored.
+
+* revme: 0.4.0 -> 0.5.0 (⚠️ API breaking changes)
+* revm: 8.0.0 -> 9.0.0 (⚠️ API breaking changes)
+* revm-interpreter: 4.0.0 -> 5.0.0 (⚠️ API breaking changes)
+* revm-primitives: 3.1.1 -> 4.0.0 (⚠️ API breaking changes)
+* revm-precompile: 6.0.0 -> 7.0.0 (⚠️ API breaking changes)
+* revm-test: 0.1.0
+
+# v35 tag
+date: 02.04.2024
+
+Small release. Alloy bump. Small refactors and deprecated functions removed.
+
+* revme: 0.3.1 -> 0.4.0 (✓ API compatible changes)
+* revm: 7.2.0 -> 8.0.0 (⚠️ API breaking changes)
+* revm-interpreter: 3.4.0 -> 4.0.0 (⚠️ API breaking changes)
+* revm-primitives: 3.1.0 -> 3.1.1 (✓ API compatible changes)
+* revm-precompile: 5.1.0 -> 6.0.0 (⚠️ API breaking changes)
+* revm-test: 0.1.0
+
+# v34 tag
+date: 20.03.2024
+
+Small release, few utilities and refactoring, precompiles fn and Interpreter helper macros are made public.
+
+* revme: 0.3.0 -> 0.3.1 (✓ API compatible changes)
+* revm: 7.1.0 -> 7.2.0 (✓ API compatible changes)
+* revm-interpreter: 3.3.0 -> 3.4.0 (✓ API compatible changes)
+* revm-primitives: 3.0.0 -> 3.1.0 (✓ API compatible changes)
+* revm-precompile: 5.0.0 -> 5.1.0 (✓ API compatible changes)
+
+# v33 tag TODO
+
+# v32 tag
+date: 08.03.2024
+
+Publish revm v7.1.0 that extends v7.0.0 with more restrictive context precompile.
+
+* revm: 7.0.0(yanked) -> 7.1.0 (⚠️ API breaking changes)
+* revm-interpreter: 3.2.0 -> 3.3.0 (✓ API compatible changes)
+
+# v31 tag
+date 08.03.2024
+
+Stateful and context aware precompiles types added. Few improvements and fixes.
+
+* revme: 0.2.2 -> 0.3.0 (⚠️ API breaking changes)
+* revm: 6.1.0 -> 7.0.0(yanked) (⚠️ API breaking changes)
+* revm-interpreter: 3.1.0 -> 3.2.0 (✓ API compatible changes)
+* revm-primitives: 2.1.0 -> 3.0.0 (⚠️ API breaking changes)
+* revm-precompile: 4.1.0 -> 5.0.0 (⚠️ API breaking changes)
+
+# v30 tag
+date: 23.02.2024
+
+Small release.
+Fixes db panic propagation and OP l1block load after cancun.
+
+* revme: 0.2.1 -> 0.2.2 (✓ API compatible changes)
+* revm: 6.0.0 -> 6.1.0 (✓ API compatible changes)
+* revm-interpreter: 3.0.0 -> 3.1.0 (✓ API compatible changes)
+* revm-primitives: 2.0.1 -> 2.1.0 (✓ API compatible changes)
+* revm-precompile: 4.0.1 -> 4.1.0 (✓ API compatible changes)
+
+# v29 tag
+date: 17.02.2024
+
+Small release, `return_memory_range` included inside `CallInput`.
+Few fixes.
+
+* revm: 5.0.0 -> 6.0.0 (⚠️ API breaking changes)
+* revm-interpreter: 2.1.0 -> 3.0.0 (⚠️ API breaking changes)
+* revm-primitives: 2.0.0 -> 2.0.1 (✓ API compatible changes)
+* revm-precompile: 4.0.0 -> 4.0.1 (✓ API compatible changes)
+
+# v28 tag
+date: 12.02.2024
+
+Small release, function renaming and some helper functions added.
+
+* revm: 4.0.0 -> 5.0.0 (⚠️ API breaking changes)
+* revm-interpreter: 2.0.0 -> 2.1.0 (✓ API compatible changes)
+* revm-precompile: 3.0.0 -> 4.0.0 (⚠️ API breaking changes)
+* revm-test: 0.1.0
+
+# v27 tag
+date: 07.02.2024
+
+Refactor of Evm logic as list of handlers inside EvmHandler and EvmBuilder that open up the Evm and allow overwriting the default behavior.
+Change how call loop (Previously it was recursion) is handled in Evm
+
+* revm: v4.0.0
+* revm-precompile: v3.0.0
+* revm-primitives: v2.0.0
+* revm-interpreter: v2.0.0
+* revme: 0.2.1
+
 # v26 tag
 date 02.10.2023
 
@@ -24,7 +235,7 @@ Bigger release. Cancun support, revm State added and some cleanup refactoring.
 # v24 tag
 date: 03.05.2023
 
-Cosnensus bug inside journal and some small changes.
+Consensus bug inside journal and some small changes.
 
 * revm: v3.3.0
 * revm-precompile: v2.0.3
