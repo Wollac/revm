@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [9.0.0](https://github.com/bluealloy/revm/compare/revm-inspector-v8.1.0...revm-inspector-v9.0.0) - 2025-08-06
+
+### Added
+
+- fix renamed functions for system_call ([#2824](https://github.com/bluealloy/revm/pull/2824))
+- add system transaction inspection support ([#2808](https://github.com/bluealloy/revm/pull/2808))
+
+### Other
+
+- update README.md ([#2842](https://github.com/bluealloy/revm/pull/2842))
+- fix inspector, cleanup loop ([#2797](https://github.com/bluealloy/revm/pull/2797))
+- improve inspector loop ([#2776](https://github.com/bluealloy/revm/pull/2776))
+- add rust-version and note about MSRV ([#2789](https://github.com/bluealloy/revm/pull/2789))
+
+## [8.1.0](https://github.com/bluealloy/revm/compare/revm-inspector-v8.0.3...revm-inspector-v8.1.0) - 2025-07-23
+
+### Added
+
+- count inspector and bench test ([#2730](https://github.com/bluealloy/revm/pull/2730))
+
+### Fixed
+
+- fully deprecate serde-json ([#2767](https://github.com/bluealloy/revm/pull/2767))
+- features and check in ci ([#2766](https://github.com/bluealloy/revm/pull/2766))
+
+### Other
+
+- *(inspector)* simplify create_end docs and intrp.bytecode.set_action ([#2723](https://github.com/bluealloy/revm/pull/2723))
+- *(inspector)* update obsolete current_opcode() comment ([#2722](https://github.com/bluealloy/revm/pull/2722))
+
 ## [8.0.3](https://github.com/bluealloy/revm/compare/revm-inspector-v8.0.2...revm-inspector-v8.0.3) - 2025-07-14
 
 ### Fixed
