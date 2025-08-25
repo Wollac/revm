@@ -7,9 +7,13 @@
 //! P256 elliptic curve. The [`P256VERIFY`] const represents the implementation of this precompile,
 //! with the address that it is currently deployed at.
 use crate::{
-    u64_to_address, PrecompileError, PrecompileOutput, PrecompileResult, PrecompileWithAddress,
+    crypto, u64_to_address, Precompile, PrecompileError, PrecompileId, PrecompileOutput,
+    PrecompileResult,
 };
-use p256::ecdsa::{signature::hazmat::PrehashVerifier, Signature, VerifyingKey};
+use p256::{
+    ecdsa::{signature::hazmat::PrehashVerifier, Signature, VerifyingKey},
+    EncodedPoint,
+};
 use primitives::{alloy_primitives::B512, Bytes, B256};
 
 /// Address of secp256r1 precompile.
@@ -22,17 +26,23 @@ pub const P256VERIFY_BASE_GAS_FEE: u64 = 3450;
 pub const P256VERIFY_BASE_GAS_FEE_OSAKA: u64 = 6900;
 
 /// Returns the secp256r1 precompile with its address.
-pub fn precompiles() -> impl Iterator<Item = PrecompileWithAddress> {
+pub fn precompiles() -> impl Iterator<Item = Precompile> {
     [P256VERIFY].into_iter()
 }
 
 /// [RIP-7212](https://github.com/ethereum/RIPs/blob/master/RIPS/rip-7212.md#specification) secp256r1 precompile.
-pub const P256VERIFY: PrecompileWithAddress =
-    PrecompileWithAddress(u64_to_address(P256VERIFY_ADDRESS), p256_verify);
+pub const P256VERIFY: Precompile = Precompile::new(
+    PrecompileId::P256Verify,
+    u64_to_address(P256VERIFY_ADDRESS),
+    p256_verify,
+);
 
 /// [RIP-7212](https://github.com/ethereum/RIPs/blob/master/RIPS/rip-7212.md#specification) secp256r1 precompile.
-pub const P256VERIFY_OSAKA: PrecompileWithAddress =
-    PrecompileWithAddress(u64_to_address(P256VERIFY_ADDRESS), p256_verify_osaka);
+pub const P256VERIFY_OSAKA: Precompile = Precompile::new(
+    PrecompileId::P256Verify,
+    u64_to_address(P256VERIFY_ADDRESS),
+    p256_verify_osaka,
+);
 
 /// secp256r1 precompile logic. It takes the input bytes sent to the precompile
 /// and the gas limit. The output represents the result of verifying the
@@ -64,7 +74,7 @@ fn p256_verify_inner(input: &[u8], gas_limit: u64, gas_cost: u64) -> PrecompileR
     if gas_cost > gas_limit {
         return Err(PrecompileError::OutOfGas);
     }
-    let result = if verify_impl(input).is_some() {
+    let result = if verify_impl(input) {
         B256::with_last_byte(1).into()
     } else {
         Bytes::new()
@@ -74,9 +84,9 @@ fn p256_verify_inner(input: &[u8], gas_limit: u64, gas_cost: u64) -> PrecompileR
 
 /// Returns `Some(())` if the signature included in the input byte slice is
 /// valid, `None` otherwise.
-pub fn verify_impl(input: &[u8]) -> Option<()> {
+pub fn verify_impl(input: &[u8]) -> bool {
     if input.len() != 160 {
-        return None;
+        return false;
     }
 
     // msg signed (msg is already the hash of the original message)
@@ -84,21 +94,18 @@ pub fn verify_impl(input: &[u8]) -> Option<()> {
     // r, s: signature
     let sig = <&B512>::try_from(&input[32..96]).unwrap();
     // x, y: public key
-    let pk = &input[96..160];
+    let pk = <&B512>::try_from(&input[96..160]).unwrap();
 
-    // Prepend 0x04 to the public key: uncompressed form
-    let mut uncompressed_pk = [0u8; 65];
-    uncompressed_pk[0] = 0x04;
-    uncompressed_pk[1..].copy_from_slice(pk);
-
-    verify_signature(msg.0, sig.0, uncompressed_pk)
+    crypto().secp256r1_verify_signature(&msg.0, &sig.0, &pk.0)
 }
 
-fn verify_signature(msg: [u8; 32], sig: [u8; 64], uncompressed_pk: [u8; 65]) -> Option<()> {
+pub(crate) fn verify_signature(msg: [u8; 32], sig: [u8; 64], pk: [u8; 64]) -> Option<()> {
     // Can fail only if the input is not exact length.
     let signature = Signature::from_slice(&sig).ok()?;
-    // Can fail if the input is not valid, so we have to propagate the error.
-    let public_key = VerifyingKey::from_sec1_bytes(&uncompressed_pk).ok()?;
+    // Decode the public key bytes (x,y coordinates) using EncodedPoint
+    let encoded_point = EncodedPoint::from_untagged_bytes(&pk.into());
+    // Create VerifyingKey from the encoded point
+    let public_key = VerifyingKey::from_encoded_point(&encoded_point).ok()?;
 
     public_key.verify_prehash(&msg, &signature).ok()
 }
@@ -157,6 +164,6 @@ mod test {
         let input = Bytes::from_hex(input).unwrap();
         let result = verify_impl(&input);
 
-        assert_eq!(result.is_some(), expect_success);
+        assert_eq!(result, expect_success);
     }
 }

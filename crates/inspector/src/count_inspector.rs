@@ -32,7 +32,7 @@ impl CountInspector {
     /// Create a new CountInspector.
     pub fn new() -> Self {
         Self {
-            opcode_counts: HashMap::new(),
+            opcode_counts: HashMap::default(),
             initialize_interp_count: 0,
             step_count: 0,
             step_end_count: 0,
@@ -47,7 +47,7 @@ impl CountInspector {
 
     /// Get the count for a specific opcode.
     pub fn get_count(&self, opcode: u8) -> u64 {
-        self.opcode_counts.get(&opcode).copied().unwrap_or(0)
+        self.opcode_counts.get(&opcode).copied().unwrap_or_default()
     }
 
     /// Get a reference to all opcode counts.
