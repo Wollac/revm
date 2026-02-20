@@ -74,6 +74,27 @@ pub fn left_pad_vec(data: &[u8], len: usize) -> Cow<'_, [u8]> {
     }
 }
 
+/// Resizes `data` in-place to `new_len`, treating it as a big-endian value.
+///
+/// Left-pads with zeroes if shorter, truncates leading bytes if longer.
+#[inline]
+pub fn resize_be(data: &mut Vec<u8>, new_len: usize) {
+    let current_len = data.len();
+
+    match current_len.cmp(&new_len) {
+        core::cmp::Ordering::Less => {
+            let pad_len = new_len - current_len;
+            data.resize(new_len, 0);
+            data.copy_within(0..current_len, pad_len);
+            data[..pad_len].fill(0);
+        }
+        core::cmp::Ordering::Greater => {
+            data.drain(..current_len - new_len);
+        }
+        core::cmp::Ordering::Equal => {}
+    }
+}
+
 /// Converts a boolean to a left-padded 32-byte [`Bytes`] value.
 ///
 /// This is optimized to not allocate at runtime by using 2 static arrays.
@@ -165,6 +186,21 @@ mod tests {
         let padded = left_pad_vec(&data, 8);
         assert!(matches!(padded, Cow::Borrowed(_)));
         assert_eq!(padded[..], [1, 2, 3, 4, 5, 6, 7, 8]);
+    }
+
+    #[test]
+    fn big_endian_resize() {
+        let mut data = vec![1, 2, 3, 4];
+        resize_be(&mut data, 8);
+        assert_eq!(data, [0, 0, 0, 0, 1, 2, 3, 4]);
+
+        let mut data = vec![0, 0, 1, 2, 3, 4];
+        resize_be(&mut data, 4);
+        assert_eq!(data, [1, 2, 3, 4]);
+
+        let mut data = vec![1, 2, 3, 4];
+        resize_be(&mut data, 4);
+        assert_eq!(data, [1, 2, 3, 4]);
     }
 
     #[test]

@@ -2,7 +2,7 @@
 //! and reprices in berlin hardfork with [`EIP-2565`](https://eips.ethereum.org/EIPS/eip-2565).
 use crate::{
     crypto,
-    utilities::{left_pad, left_pad_vec, right_pad_vec, right_pad_with_offset},
+    utilities::{left_pad, resize_be, right_pad_vec, right_pad_with_offset},
     Precompile, PrecompileError, PrecompileId, PrecompileOutput, PrecompileResult,
 };
 use core::cmp::{max, min};
@@ -245,13 +245,11 @@ where
     debug_assert_eq!(modulus.len(), mod_len);
 
     // Call the modexp.
-    let output = crypto().modexp(base, exponent, modulus)?;
+    let mut output = crypto().modexp(base, exponent, modulus)?;
+    // Ensure the output is exactly modulus length, as required by the spec.
+    resize_be(&mut output, mod_len);
 
-    // Left pad the result to modulus length. bytes will always by less or equal to modulus length.
-    Ok(PrecompileOutput::new(
-        gas_cost,
-        left_pad_vec(&output, mod_len).into_owned().into(),
-    ))
+    Ok(PrecompileOutput::new(gas_cost, output.into()))
 }
 
 /// Calculate the gas cost for the modexp precompile with BYZANTIUM gas rules.
