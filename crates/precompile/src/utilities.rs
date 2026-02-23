@@ -1,6 +1,6 @@
 //! Utility function that precompiles use, padding and converting between types.
 use primitives::{b256, Bytes, B256};
-use std::{borrow::Cow, vec::Vec};
+use std::borrow::Cow;
 
 /// Right-pads the given slice at `offset` with zeroes until `LEN`.
 ///
@@ -74,24 +74,19 @@ pub fn left_pad_vec(data: &[u8], len: usize) -> Cow<'_, [u8]> {
     }
 }
 
-/// Resizes `data` in-place to `new_len`, treating it as a big-endian value.
+/// Left-pads the given big-endian slice with zeroes until `len`.
 ///
-/// Left-pads with zeroes if shorter, truncates leading bytes if longer.
+/// Unlike [`left_pad_vec`], when `data` is longer than `len` this correctly
+/// truncates leading (most-significant) bytes instead of trailing ones.
 #[inline]
-pub fn resize_be(data: &mut Vec<u8>, new_len: usize) {
-    let current_len = data.len();
-
-    match current_len.cmp(&new_len) {
-        core::cmp::Ordering::Less => {
-            let pad_len = new_len - current_len;
-            data.resize(new_len, 0);
-            data.copy_within(0..current_len, pad_len);
-            data[..pad_len].fill(0);
-        }
-        core::cmp::Ordering::Greater => {
-            data.drain(..current_len - new_len);
-        }
-        core::cmp::Ordering::Equal => {}
+pub fn left_pad_vec_be(data: &[u8], len: usize) -> Cow<'_, [u8]> {
+    if data.len() < len {
+        let mut padded = vec![0; len];
+        padded[len - data.len()..].copy_from_slice(data);
+        Cow::Owned(padded)
+    } else {
+        // Truncate leading bytes (data is big-endian).
+        Cow::Borrowed(&data[data.len() - len..])
     }
 }
 
@@ -189,18 +184,21 @@ mod tests {
     }
 
     #[test]
-    fn big_endian_resize() {
-        let mut data = vec![1, 2, 3, 4];
-        resize_be(&mut data, 8);
-        assert_eq!(data, [0, 0, 0, 0, 1, 2, 3, 4]);
+    fn left_padding_be() {
+        let data = [1, 2, 3, 4];
+        let padded = left_pad_vec_be(&data, 8);
+        assert!(matches!(padded, Cow::Owned(_)));
+        assert_eq!(padded[..], [0, 0, 0, 0, 1, 2, 3, 4]);
 
-        let mut data = vec![0, 0, 1, 2, 3, 4];
-        resize_be(&mut data, 4);
-        assert_eq!(data, [1, 2, 3, 4]);
+        let data = [0, 0, 1, 2, 3, 4];
+        let padded = left_pad_vec_be(&data, 4);
+        assert!(matches!(padded, Cow::Borrowed(_)));
+        assert_eq!(padded[..], [1, 2, 3, 4]);
 
-        let mut data = vec![1, 2, 3, 4];
-        resize_be(&mut data, 4);
-        assert_eq!(data, [1, 2, 3, 4]);
+        let data = [1, 2, 3, 4];
+        let padded = left_pad_vec_be(&data, 4);
+        assert!(matches!(padded, Cow::Borrowed(_)));
+        assert_eq!(padded[..], [1, 2, 3, 4]);
     }
 
     #[test]
