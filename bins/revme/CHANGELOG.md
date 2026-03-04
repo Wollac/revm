@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [13.0.0](https://github.com/Wollac/revm/compare/revme-v12.0.0...revme-v13.0.0) - 2026-03-04
+
+### Other
+
+- *(revme)* handle system call errors ([#3465](https://github.com/Wollac/revm/pull/3465))
+
 ## [12.0.0](https://github.com/bluealloy/revm/compare/revme-v11.0.0...revme-v12.0.0) - 2026-03-02
 
 ### Added
