@@ -2953,7 +2953,7 @@ checksum = "d6790f58c7ff633d8771f42965289203411a5e5c68388703c06e14f24770b41e"
 
 [[package]]
 name = "op-revm"
-version = "16.0.0"
+version = "16.0.1"
 dependencies = [
  "alloy-primitives",
  "alloy-sol-types",
@@ -3572,7 +3572,7 @@ dependencies = [
 
 [[package]]
 name = "revm"
-version = "35.0.0"
+version = "35.0.1"
 dependencies = [
  "revm-bytecode",
  "revm-context",
@@ -3606,7 +3606,7 @@ dependencies = [
 
 [[package]]
 name = "revm-context"
-version = "14.0.0"
+version = "14.0.1"
 dependencies = [
  "bitvec",
  "cfg-if",
@@ -3636,7 +3636,7 @@ dependencies = [
 
 [[package]]
 name = "revm-database"
-version = "11.0.0"
+version = "11.1.0"
 dependencies = [
  "alloy-eips",
  "alloy-provider",
@@ -3667,19 +3667,15 @@ dependencies = [
 name = "revm-ee-tests"
 version = "0.1.0"
 dependencies = [
- "alloy-primitives",
- "alloy-sol-types",
  "op-revm",
  "revm",
- "rstest",
  "serde",
  "serde_json",
- "sha2",
 ]
 
 [[package]]
 name = "revm-handler"
-version = "16.0.0"
+version = "16.0.1"
 dependencies = [
  "alloy-signer",
  "alloy-signer-local",
@@ -3699,7 +3695,7 @@ dependencies = [
 
 [[package]]
 name = "revm-inspector"
-version = "16.0.0"
+version = "16.0.1"
 dependencies = [
  "auto_impl",
  "either",
@@ -3779,7 +3775,7 @@ dependencies = [
 
 [[package]]
 name = "revm-statetest-types"
-version = "15.0.0"
+version = "15.0.1"
 dependencies = [
  "alloy-eip7928",
  "k256",
@@ -3796,7 +3792,7 @@ dependencies = [
 
 [[package]]
 name = "revme"
-version = "12.0.0"
+version = "13.0.0"
 dependencies = [
  "alloy-rlp",
  "alloy-sol-types",

@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [11.1.0](https://github.com/Wollac/revm/compare/revm-database-v11.0.0...revm-database-v11.1.0) - 2026-03-04
+
+### Added
+
+- add extend method to BlockHashCache ([#3471](https://github.com/Wollac/revm/pull/3471))
+
 ## [11.0.0](https://github.com/bluealloy/revm/compare/revm-database-v10.0.0...revm-database-v11.0.0) - 2026-03-02
 
 ### Added
