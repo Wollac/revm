@@ -8,7 +8,7 @@ use revm::{
     inspector::{inspectors::TracerEip3155, InspectCommitEvm},
     primitives::{hardfork::SpecId, Bytes, B256, U256},
     statetest_types::{SpecName, Test, TestSuite, TestUnit},
-    Context, ExecuteCommitEvm, MainBuilder, MainContext,
+    Context, ExecuteCommitEvm, InspectEvm, MainBuilder, MainContext,
 };
 use serde_json::json;
 use std::{
@@ -458,7 +458,10 @@ fn debug_failed_test(ctx: DebugContext) {
         .with_cfg(ctx.cfg.clone())
         .build_mainnet_with_inspector(TracerEip3155::buffered(stderr()).without_summary());
 
-    let exec_result = evm.inspect_tx_commit(ctx.tx);
+    let _ = evm.inspect_tx(ctx.tx);
+
+    // Execute the transaction without tracing
+    let exec_result = evm.transact_commit(ctx.tx);
 
     println!("\nExecution result: {exec_result:#?}");
     println!("\nExpected exception: {:?}", ctx.test.expect_exception);
@@ -507,6 +510,7 @@ struct TestRunnerState {
     console_bar: Arc<ProgressBar>,
     queue: Arc<Mutex<(usize, Vec<PathBuf>)>>,
     elapsed: Arc<Mutex<Duration>>,
+    errors: Arc<Mutex<Vec<TestError>>>,
 }
 
 impl TestRunnerState {
@@ -525,6 +529,7 @@ impl TestRunnerState {
             )),
             queue: Arc::new(Mutex::new((0usize, test_files))),
             elapsed: Arc::new(Mutex::new(Duration::ZERO)),
+            errors: Arc::new(Mutex::new(Vec::new())),
         }
     }
 
@@ -558,7 +563,9 @@ fn run_test_worker(state: TestRunnerState, config: TestRunnerConfig) -> Result<(
 
         if let Err(err) = result {
             state.n_errors.fetch_add(1, Ordering::SeqCst);
-            if !config.keep_going {
+            if config.keep_going {
+                state.errors.lock().unwrap().push(err);
+            } else {
                 return Err(err);
             }
         }
@@ -636,6 +643,15 @@ pub fn run(
         Ok(())
     } else {
         println!("Encountered {n_errors} errors out of {n_files} total tests");
+
+        let collected_errors = state.errors.lock().unwrap();
+        if !collected_errors.is_empty() {
+            println!("\nFailed tests:");
+            for error in collected_errors.iter() {
+                println!("  {error}");
+            }
+        }
+        drop(collected_errors);
 
         if n_thread_errors == 0 {
             std::process::exit(1);

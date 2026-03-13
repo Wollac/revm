@@ -56,7 +56,7 @@ pub fn swap<const N: usize, WIRE: InterpreterTypes, H: ?Sized>(
 ) {
     assert!(N != 0);
     if !context.interpreter.stack.exchange(0, N) {
-        context.interpreter.halt(InstructionResult::StackOverflow);
+        context.interpreter.halt(InstructionResult::StackUnderflow);
     }
 }
 
@@ -86,7 +86,7 @@ pub fn swapn<WIRE: InterpreterTypes, H: ?Sized>(context: InstructionContext<'_, 
     let x: usize = context.interpreter.bytecode.read_u8().into();
     if let Some(n) = decode_single(x) {
         if !context.interpreter.stack.exchange(0, n) {
-            context.interpreter.halt(InstructionResult::StackOverflow);
+            context.interpreter.halt(InstructionResult::StackUnderflow);
         }
         context.interpreter.bytecode.relative_jump(1);
     } else {
@@ -104,7 +104,7 @@ pub fn exchange<WIRE: InterpreterTypes, H: ?Sized>(context: InstructionContext<'
     let x: usize = context.interpreter.bytecode.read_u8().into();
     if let Some((n, m)) = decode_pair(x) {
         if !context.interpreter.stack.exchange(n, m - n) {
-            context.interpreter.halt(InstructionResult::StackOverflow);
+            context.interpreter.halt(InstructionResult::StackUnderflow);
         }
         context.interpreter.bytecode.relative_jump(1);
     } else {
@@ -115,23 +115,18 @@ pub fn exchange<WIRE: InterpreterTypes, H: ?Sized>(context: InstructionContext<'
 }
 
 fn decode_single(x: usize) -> Option<usize> {
-    if x <= 90 {
-        Some(x + 17)
-    } else if x >= 128 {
-        Some(x - 20)
+    if x <= 90 || x >= 128 {
+        Some((x + 145) % 256)
     } else {
         None
     }
 }
 
 fn decode_pair(x: usize) -> Option<(usize, usize)> {
-    let k = if x <= 79 {
-        x
-    } else if x >= 128 {
-        x - 48
-    } else {
+    if x > 81 && x < 128 {
         return None;
-    };
+    }
+    let k = x ^ 143;
     let q = k / 16;
     let r = k % 16;
     if q < r {
@@ -174,7 +169,7 @@ mod tests {
     fn test_dupn() {
         let interpreter = run_bytecode(&[
             PUSH1, 0x01, PUSH1, 0x00, DUP1, DUP1, DUP1, DUP1, DUP1, DUP1, DUP1, DUP1, DUP1, DUP1,
-            DUP1, DUP1, DUP1, DUP1, DUP1, DUPN, 0x00,
+            DUP1, DUP1, DUP1, DUP1, DUP1, DUPN, 0x80,
         ]);
         assert_eq!(interpreter.stack.len(), 18);
         assert_eq!(interpreter.stack.data()[17], U256::from(1));
@@ -188,7 +183,7 @@ mod tests {
     fn test_swapn() {
         let interpreter = run_bytecode(&[
             PUSH1, 0x01, PUSH1, 0x00, DUP1, DUP1, DUP1, DUP1, DUP1, DUP1, DUP1, DUP1, DUP1, DUP1,
-            DUP1, DUP1, DUP1, DUP1, DUP1, PUSH1, 0x02, SWAPN, 0x00,
+            DUP1, DUP1, DUP1, DUP1, DUP1, PUSH1, 0x02, SWAPN, 0x80,
         ]);
         assert_eq!(interpreter.stack.len(), 18);
         assert_eq!(interpreter.stack.data()[17], U256::from(1));
@@ -200,7 +195,7 @@ mod tests {
 
     #[test]
     fn test_exchange() {
-        let interpreter = run_bytecode(&[PUSH1, 0x00, PUSH1, 0x01, PUSH1, 0x02, EXCHANGE, 0x01]);
+        let interpreter = run_bytecode(&[PUSH1, 0x00, PUSH1, 0x01, PUSH1, 0x02, EXCHANGE, 0x8E]);
         assert_eq!(interpreter.stack.len(), 3);
         assert_eq!(interpreter.stack.data()[2], U256::from(2));
         assert_eq!(interpreter.stack.data()[1], U256::from(0));
@@ -222,7 +217,7 @@ mod tests {
     #[test]
     fn test_exchange_with_iszero() {
         let interpreter = run_bytecode(&[
-            PUSH1, 0x00, PUSH1, 0x00, PUSH1, 0x00, EXCHANGE, 0x01, ISZERO,
+            PUSH1, 0x00, PUSH1, 0x00, PUSH1, 0x00, EXCHANGE, 0x8E, ISZERO,
         ]);
         assert_eq!(interpreter.stack.len(), 3);
         assert_eq!(interpreter.stack.data()[2], U256::from(1));
